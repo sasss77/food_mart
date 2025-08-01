@@ -33,8 +33,16 @@
             android:label="foodmart"
             android:theme="@style/Theme.Foodmart" />
 
+        <activity
+            android:name=".view.AddProductActivity"
+            android:exported="false" />
 
-
+        <activity
+            android:name=".view.EditProductActivity"
+            android:exported="false" />
+        <activity
+            android:name=".view.ViewProductActivity"
+            android:exported="false" />
         <activity
             android:name=".view.RegistrationActivity"
             android:exported="false"
