@@ -1,14 +1,14 @@
 {
   "project_info": {
-    "project_number": "42449162610",
-    "firebase_url": "https://petadoption-6b3c3-default-rtdb.firebaseio.com",
-    "project_id": "petadoption-6b3c3",
-    "storage_bucket": "petadoption-6b3c3.firebasestorage.app"
+    "project_number": "166154918670",
+    "firebase_url": "https://foodmart-33ebd-default-rtdb.firebaseio.com",
+    "project_id": "foodmart-33ebd",
+    "storage_bucket": "foodmart-33ebd.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:42449162610:android:1e5bb6c53389ba3ac0cdeb",
+        "mobilesdk_app_id": "1:166154918670:android:b0c471e8fa3387d666955f",
         "android_client_info": {
           "package_name": "com.example.foodmart"
         }
@@ -16,26 +16,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyA6b07_lDoeXVloHL-yv7KcIazeQfxTCa8"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": []
-        }
-      }
-    },
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:42449162610:android:60167d53109b5983c0cdeb",
-        "android_client_info": {
-          "package_name": "com.example.petadoptionmanagement"
-        }
-      },
-      "oauth_client": [],
-      "api_key": [
-        {
-          "current_key": "AIzaSyA6b07_lDoeXVloHL-yv7KcIazeQfxTCa8"
+          "current_key": "AIzaSyDZwxTQg_h8oeRYEpJYLHJ3Rp1ILo-Wr5I"
         }
       ],
       "services": {

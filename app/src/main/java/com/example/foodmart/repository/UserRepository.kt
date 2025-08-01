@@ -1,9 +1,7 @@
 package com.example.foodmart.repository
 
+
 import com.example.foodmart.model.UserModel
-
-
-
 import com.google.firebase.auth.FirebaseUser
 
 interface UserRepository {
