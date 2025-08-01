@@ -14,6 +14,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -26,7 +28,9 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -89,15 +93,28 @@ fun DashboardScreen(productViewModel: ProductViewModel) {
 
     // Navigation state
     var selectedTab by remember { mutableIntStateOf(0) }
-    val tabs = listOf("Products", "Profile")
+    val tabs = listOf("Products", "Search", "Profile")
+    val tabIcons = listOf(Icons.Default.ShoppingCart, Icons.Default.Search, Icons.Default.Person)
 
     // Observe products from ViewModel
     val allProducts by productViewModel.allProducts.observeAsState(emptyList())
     val isLoading by productViewModel.loading.observeAsState(false)
 
+    // LOCAL ONLY: Favorite products state management (UI only)
+    var favoriteProducts by remember { mutableStateOf(setOf<String>()) }
+
     // Load products on first composition
     LaunchedEffect(Unit) {
         productViewModel.getAllProduct()
+    }
+
+    // Simple function to toggle favorite status (UI state only)
+    fun toggleFavorite(productId: String) {
+        favoriteProducts = if (favoriteProducts.contains(productId)) {
+            favoriteProducts - productId
+        } else {
+            favoriteProducts + productId
+        }
     }
 
     // User info from SharedPreferences
@@ -150,7 +167,7 @@ fun DashboardScreen(productViewModel: ProductViewModel) {
                         onClick = { selectedTab = index },
                         icon = {
                             Icon(
-                                imageVector = if (index == 0) Icons.Default.ShoppingCart else Icons.Default.Person,
+                                imageVector = tabIcons[index],
                                 contentDescription = tab
                             )
                         },
@@ -160,10 +177,9 @@ fun DashboardScreen(productViewModel: ProductViewModel) {
             }
         },
         floatingActionButton = {
-            if (selectedTab == 0) { // Show FAB only on Products tab
+            if (selectedTab == 0) {
                 FloatingActionButton(
                     onClick = {
-                        // Navigate to AddProductActivity
                         val intent = Intent(context, AddProductActivity::class.java)
                         context.startActivity(intent)
                     },
@@ -196,6 +212,8 @@ fun DashboardScreen(productViewModel: ProductViewModel) {
                 0 -> ProductsScreen(
                     products = allProducts,
                     isLoading = isLoading,
+                    favoriteProducts = favoriteProducts,
+                    onToggleFavorite = ::toggleFavorite,
                     onViewProduct = { product ->
                         val intent = Intent(context, ViewProductActivity::class.java)
                         intent.putExtra("product_id", product.productID)
@@ -212,7 +230,28 @@ fun DashboardScreen(productViewModel: ProductViewModel) {
                     textColor = textColor,
                     secondaryColor = secondaryColor
                 )
-                1 -> ProfileScreen(
+                1 -> SearchScreen(
+                    products = allProducts,
+                    isLoading = isLoading,
+                    favoriteProducts = favoriteProducts,
+                    onToggleFavorite = ::toggleFavorite,
+                    onViewProduct = { product ->
+                        val intent = Intent(context, ViewProductActivity::class.java)
+                        intent.putExtra("product_id", product.productID)
+                        context.startActivity(intent)
+                    },
+                    onEditProduct = { product ->
+                        val intent = Intent(context, EditProductActivity::class.java)
+                        intent.putExtra("product_id", product.productID)
+                        context.startActivity(intent)
+                    },
+                    innerPadding = innerPadding,
+                    primaryColor = primaryColor,
+                    cardColor = cardColor,
+                    textColor = textColor,
+                    secondaryColor = secondaryColor
+                )
+                2 -> ProfileScreen(
                     userEmail = userEmail,
                     innerPadding = innerPadding,
                     primaryColor = primaryColor,
@@ -226,10 +265,414 @@ fun DashboardScreen(productViewModel: ProductViewModel) {
     }
 }
 
+// SearchScreen Composable
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SearchScreen(
+    products: List<ProductModel>,
+    isLoading: Boolean,
+    favoriteProducts: Set<String>,
+    onToggleFavorite: (String) -> Unit,
+    onViewProduct: (ProductModel) -> Unit,
+    onEditProduct: (ProductModel) -> Unit,
+    innerPadding: PaddingValues,
+    primaryColor: Color,
+    cardColor: Color,
+    textColor: Color,
+    secondaryColor: Color
+) {
+    var searchQuery by remember { mutableStateOf("") }
+    var selectedCategory by remember { mutableStateOf("All") }
+    var showCategoryFilter by remember { mutableStateOf(false) }
+
+    val keyboardController = LocalSoftwareKeyboardController.current
+
+    val categories = remember(products) {
+        listOf("All") + products.map { it.category }.distinct().sorted()
+    }
+
+    val filteredProducts = remember(products, searchQuery, selectedCategory) {
+        products.filter { product ->
+            val matchesSearch = if (searchQuery.isBlank()) {
+                true
+            } else {
+                product.productName.contains(searchQuery, ignoreCase = true) ||
+                        product.description.contains(searchQuery, ignoreCase = true) ||
+                        product.category.contains(searchQuery, ignoreCase = true)
+            }
+
+            val matchesCategory = selectedCategory == "All" || product.category == selectedCategory
+
+            matchesSearch && matchesCategory
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .padding(innerPadding)
+            .padding(16.dp)
+            .fillMaxSize()
+    ) {
+        Text(
+            text = "🔍 Search Products",
+            fontSize = 24.sp,
+            fontWeight = FontWeight.Bold,
+            color = textColor,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
+
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .shadow(2.dp, RoundedCornerShape(12.dp)),
+            colors = CardDefaults.cardColors(containerColor = cardColor),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text("Search by name, category, or description...") },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = "Search",
+                        tint = primaryColor
+                    )
+                },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(
+                            onClick = {
+                                searchQuery = ""
+                                keyboardController?.hide()
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Clear,
+                                contentDescription = "Clear",
+                                tint = Color.Gray
+                            )
+                        }
+                    }
+                },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = primaryColor,
+                    focusedLabelColor = primaryColor,
+                    unfocusedBorderColor = Color.Transparent
+                ),
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(
+                    onSearch = { keyboardController?.hide() }
+                )
+            )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Filter by Category:",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = textColor
+            )
+
+            Card(
+                modifier = Modifier.clickable { showCategoryFilter = true },
+                colors = CardDefaults.cardColors(
+                    containerColor = if (selectedCategory == "All") cardColor else primaryColor.copy(alpha = 0.1f)
+                ),
+                shape = RoundedCornerShape(20.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = selectedCategory,
+                        fontSize = 12.sp,
+                        color = if (selectedCategory == "All") textColor else primaryColor,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Icon(
+                        imageVector = Icons.Default.ArrowDropDown,
+                        contentDescription = "Dropdown",
+                        tint = if (selectedCategory == "All") textColor else primaryColor,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+        }
+
+        DropdownMenu(
+            expanded = showCategoryFilter,
+            onDismissRequest = { showCategoryFilter = false }
+        ) {
+            categories.forEach { category ->
+                DropdownMenuItem(
+                    text = { Text(category) },
+                    onClick = {
+                        selectedCategory = category
+                        showCategoryFilter = false
+                    }
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        if (searchQuery.isNotEmpty() || selectedCategory != "All") {
+            Text(
+                text = "Found ${filteredProducts.size} product${if (filteredProducts.size != 1) "s" else ""}",
+                fontSize = 12.sp,
+                color = Color.Gray,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+        }
+
+        when {
+            isLoading -> {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(color = primaryColor)
+                }
+            }
+            products.isEmpty() -> {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 32.dp),
+                    colors = CardDefaults.cardColors(containerColor = cardColor),
+                    elevation = CardDefaults.cardElevation(8.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .padding(32.dp)
+                            .fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text("🛍️", fontSize = 48.sp)
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            "No products to search!",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = textColor
+                        )
+                        Text(
+                            "Add some products first to search through them",
+                            fontSize = 14.sp,
+                            color = Color.Gray,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            }
+            filteredProducts.isEmpty() -> {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 32.dp),
+                    colors = CardDefaults.cardColors(containerColor = cardColor),
+                    elevation = CardDefaults.cardElevation(8.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .padding(32.dp)
+                            .fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text("🔍", fontSize = 48.sp)
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            "No results found",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = textColor
+                        )
+                        Text(
+                            "Try different keywords or check your filters",
+                            fontSize = 14.sp,
+                            color = Color.Gray,
+                            textAlign = TextAlign.Center
+                        )
+
+                        if (searchQuery.isNotEmpty() || selectedCategory != "All") {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            TextButton(
+                                onClick = {
+                                    searchQuery = ""
+                                    selectedCategory = "All"
+                                }
+                            ) {
+                                Text("Clear Filters", color = primaryColor)
+                            }
+                        }
+                    }
+                }
+            }
+            else -> {
+                LazyColumn {
+                    items(filteredProducts) { product ->
+                        SearchProductCard(
+                            product = product,
+                            searchQuery = searchQuery,
+                            isFavorite = favoriteProducts.contains(product.productID),
+                            onToggleFavorite = { onToggleFavorite(product.productID) },
+                            onView = { onViewProduct(product) },
+                            onEdit = { onEditProduct(product) },
+                            primaryColor = primaryColor,
+                            cardColor = cardColor,
+                            textColor = textColor,
+                            secondaryColor = secondaryColor
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                }
+            }
+        }
+    }
+}
+
+// SearchProductCard with heart icon
+@Composable
+fun SearchProductCard(
+    product: ProductModel,
+    searchQuery: String,
+    isFavorite: Boolean,
+    onToggleFavorite: () -> Unit,
+    onView: () -> Unit,
+    onEdit: () -> Unit,
+    primaryColor: Color,
+    cardColor: Color,
+    textColor: Color,
+    secondaryColor: Color
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(4.dp, RoundedCornerShape(12.dp))
+            .clickable { onView() },
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = cardColor)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = product.productName,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = textColor
+                    )
+
+                    Row(
+                        modifier = Modifier.padding(top = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = primaryColor.copy(alpha = 0.1f)),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text(
+                                text = product.category,
+                                fontSize = 10.sp,
+                                color = primaryColor,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                            )
+                        }
+
+                        if (searchQuery.isNotEmpty()) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            val matchFound = when {
+                                product.productName.contains(searchQuery, ignoreCase = true) -> "📝 Name"
+                                product.category.contains(searchQuery, ignoreCase = true) -> "🏷️ Category"
+                                product.description.contains(searchQuery, ignoreCase = true) -> "📄 Description"
+                                else -> ""
+                            }
+                            if (matchFound.isNotEmpty()) {
+                                Text(
+                                    text = matchFound,
+                                    fontSize = 10.sp,
+                                    color = secondaryColor,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                    }
+
+                    if (product.description.isNotEmpty()) {
+                        Text(
+                            text = product.description,
+                            fontSize = 14.sp,
+                            color = Color.Gray,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(top = 6.dp)
+                        )
+                    }
+
+                    Text(
+                        text = "$${String.format("%.2f", product.price)}",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = secondaryColor,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+
+                Row {
+                    // Heart/Favorite Icon
+                    IconButton(onClick = onToggleFavorite) {
+                        Icon(
+                            imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                            contentDescription = if (isFavorite) "Remove from favorites" else "Add to favorites",
+                            tint = if (isFavorite) Color.Red else Color.Gray
+                        )
+                    }
+                    IconButton(onClick = onView) {
+                        Icon(
+                            imageVector = Icons.Default.Visibility,
+                            contentDescription = "View",
+                            tint = secondaryColor
+                        )
+                    }
+                    IconButton(onClick = onEdit) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "Edit",
+                            tint = primaryColor
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ProductsScreen with favorite functionality
 @Composable
 fun ProductsScreen(
     products: List<ProductModel>,
     isLoading: Boolean,
+    favoriteProducts: Set<String>,
+    onToggleFavorite: (String) -> Unit,
     onViewProduct: (ProductModel) -> Unit,
     onEditProduct: (ProductModel) -> Unit,
     innerPadding: PaddingValues,
@@ -254,7 +697,6 @@ fun ProductsScreen(
 
         when {
             isLoading -> {
-                // Loading state
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -263,7 +705,6 @@ fun ProductsScreen(
                 }
             }
             products.isEmpty() -> {
-                // Empty state
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -299,6 +740,8 @@ fun ProductsScreen(
                     items(products) { product ->
                         ProductCard(
                             product = product,
+                            isFavorite = favoriteProducts.contains(product.productID),
+                            onToggleFavorite = { onToggleFavorite(product.productID) },
                             onView = { onViewProduct(product) },
                             onEdit = { onEditProduct(product) },
                             primaryColor = primaryColor,
@@ -314,9 +757,12 @@ fun ProductsScreen(
     }
 }
 
+// ProductCard with heart icon
 @Composable
 fun ProductCard(
     product: ProductModel,
+    isFavorite: Boolean,
+    onToggleFavorite: () -> Unit,
     onView: () -> Unit,
     onEdit: () -> Unit,
     primaryColor: Color,
@@ -328,7 +774,7 @@ fun ProductCard(
         modifier = Modifier
             .fillMaxWidth()
             .shadow(4.dp, RoundedCornerShape(12.dp))
-            .clickable { onView() }, // Make entire card clickable for view
+            .clickable { onView() },
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = cardColor)
     ) {
@@ -371,6 +817,14 @@ fun ProductCard(
                 }
 
                 Row {
+                    // Heart/Favorite Icon
+                    IconButton(onClick = onToggleFavorite) {
+                        Icon(
+                            imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                            contentDescription = if (isFavorite) "Remove from favorites" else "Add to favorites",
+                            tint = if (isFavorite) Color.Red else Color.Gray
+                        )
+                    }
                     IconButton(onClick = onView) {
                         Icon(
                             imageVector = Icons.Default.Visibility,
@@ -391,6 +845,7 @@ fun ProductCard(
     }
 }
 
+// ProfileScreen
 @Composable
 fun ProfileScreen(
     userEmail: String,
@@ -488,18 +943,10 @@ fun ProfileScreen(
                     modifier = Modifier.padding(bottom = 16.dp)
                 )
 
-                SettingsItem("🔧 Settings", "App preferences") {
-                    // You can create a SettingsActivity later
-                }
-                SettingsItem("📊 Analytics", "View your stats") {
-                    // You can create an AnalyticsActivity later
-                }
-                SettingsItem("💬 Support", "Get help") {
-                    // You can create a SupportActivity later
-                }
-                SettingsItem("ℹ️ About", "App information") {
-                    // You can create an AboutActivity later
-                }
+                SettingsItem("🔧 Settings", "App preferences") {}
+                SettingsItem("📊 Analytics", "View your stats") {}
+                SettingsItem("💬 Support", "Get help") {}
+                SettingsItem("ℹ️ About", "App information") {}
             }
         }
 
